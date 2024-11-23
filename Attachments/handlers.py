@@ -33,8 +33,8 @@ async def reg_rating_one(message: Message, state: FSMContext):
     builder.adjust(5)
 
     # Устанавливаем состояние "user_rating"
-    await message.answer('Поставьте оценку', reply_markup=builder.as_markup(resize_keyboard=True))
     await state.set_state(Review.user_rating)
+    await message.answer('Поставьте оценку', reply_markup=builder.as_markup(resize_keyboard=True))
 
 
 # Устанавливаем состояние "user_rating"
@@ -43,44 +43,15 @@ async def reg_rating_one(message: Message, state: FSMContext):
 # Обработчик для получения оценки пользователя
 @router.message(Review.user_rating)
 async def too(message: Message, state: FSMContext):
-    await state.update_data(user_rating=message.text)
-
-    # Сохраняем оценку в состояние FSM
-    global operator
-    user_input = message.text.strip()
-    if user_input == 'Да':
-        await message.answer('Напишите отзыв')
-        await state.set_state(Review.user_review)
-        operator = '3'
-
-
-    # Обработчик для ответа "Нет"
-
-    elif user_input == 'Нет':
-        # Получаем данные из состояния
-        global data
-        operator = '3'
-
-        data = await state.get_data()
-
-        data_revers = OrderedDict(data)
-        data_revers['id_user'] = message.from_user.id
-        data_revers.move_to_end('id_user', last=False)
-        data_revers = dict(data_revers)
-
-        # Сообщаем пользователю, что отзыв не требуется
-        await message.answer(f'Спасибо! Ваша оценка: {data_revers}')
-        await state.clear()
-    if operator == '0':
-        # Переходим к следующему состоянию
-        await message.answer('Рейтинг принят. Хотите ли вы написать отзыв? (Да/Нет)')
-        operator = '1'
-    elif operator == '1':
-        await message.answer('Напишите "Да" или "Нет"')
+    await state.update_data(name=message.text)
+    await state.set_state(Review.user_review)
+    await message.answer('Оценка принята')
 
 # Обработчик для сохранения отзыва
 @router.message(Review.user_review)
 async def save_review(message: Message, state: FSMContext):
+
+
     await state.update_data(user_review=message.text)
     global data
     data = await state.get_data()
