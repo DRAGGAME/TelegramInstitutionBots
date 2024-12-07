@@ -1,0 +1,18 @@
+name: telegramBots
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - pip>=21.0.1
+  - setuptools>=51.00.0
+  - python>=3.10.0
+  - psycopg2-binary
+  - qrcode
+  - pillow
+  - docker
+  - docker-compose
+  - pip:
+    - aiogram>3.1.0
+    - python-dotenv
+
+prefix: c:/Users/schowm/anaconda3/envs/telegrams-env
