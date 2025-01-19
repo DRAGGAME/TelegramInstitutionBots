@@ -1,107 +1,106 @@
-import psycopg2
-from psycopg2 import sql
-from psycopg2 import Error
+import asyncio
+import asyncpg
+import os
+from dotenv import load_dotenv
 
-from config import ip, PG_user, DATABASE, PG_password
-import logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Загружаем переменные из .env
+load_dotenv()
+user = os.getenv('PG_user')
+password = os.getenv('PG_password')
+ip = os.getenv('ip')
+database = os.getenv('database')
+
+'''Класс для работы с БД'''
+
 
 class Sqlbase:
     def __init__(self):
-        self.connection = psycopg2.connect(host=ip, user=PG_user, password=PG_password, database=DATABASE)
-        self.connection.autocommit=False
-        self.cursor = self.connection.cursor()
+        self.connection = None
 
-
-    def spaltenerstellen(self):
-        # Создание столбцов
+    async def connect(self):
         try:
-            self.cursor.execute('''CREATE TABLE IF NOT EXISTS servers(
-                            Id SERIAL PRIMARY KEY,
-                            Data_times text,
-                            Place text,
-                            Id_user text,
-                            Rating INTEGER,
-                            Review text
-                            );''')
-            self.connection.commit()
-        except Error as e:
-            # Откат изменений в случае ошибки
-            self.connection.rollback()
-            # Выводим сообщение об ошибке и ее код
-            print(f"Transaction failed: {e.pgcode} - {e.pgerror}")
+            self.connection = await asyncpg.connect(
+                host=ip,
+                user=user,
+                password=password,
+                database=database,
+            )
+            print("Соединение с базой данных установлено.")
+        except Exception as e:
+            print(f"Ошибка подключения к базе данных: {e}")
+            raise
 
-        finally:
-            if self.connection:
-                self.cursor.close()
-                self.connection.close()
-                print('Всё окей')
+    async def close(self):
+        if self.connection:
 
+            await self.connection.close()
+            print("Соединение с базой данных закрыто.")
 
-    def spaltenausgabe(self):
+    async def execute_query(self, query, params=None):
+        if not self.connection:
+            raise ValueError("Соединение не установлено. Убедитесь, что вызвали connect().")
+
         try:
-            query = sql.SQL("SELECT {fields} FROM {table} WHERE {pkey} = %s;").format(
-                    fields=sql.SQL(', ').join([
-                        sql.Identifier('id'),
-                        sql.Identifier('data_times'),
-                        sql.Identifier('place'),
-                        sql.Identifier('id_user'),
-                        sql.Identifier('rating'),
-                        sql.Identifier('review')
-                    ]),
-                    table=sql.Identifier('servers'),
-                    pkey=sql.Identifier('id')
-                )
-            self.cursor.execute(query, (1,))
-            self.connection.commit()
-            print(self.cursor.fetchone())
-        except Error as e:
-            # Откат изменений в случае ошибки
-            self.connection.rollback()
-            # Выводим сообщение об ошибке и ее код
-            print(f"Transaction failed: {e.pgcode} - {e.pgerror}")
+            async with self.connection.transaction():
+                if params:
+                    result = await self.connection.fetch(query, *params)
+                else:
+                    result = await self.connection.fetch(query)
+                return result
+        except asyncpg.PostgresError as e:
+            print(f"Ошибка выполнения запроса: {e}")
+            raise
 
-        finally:
-            if self.connection:
-                self.cursor.close()
-                self.connection.close()
-                print('Всё окей')
+    async def spaltenerstellen(self):
+        query = '''
+            CREATE TABLE IF NOT EXISTS servers (
+                Id SERIAL PRIMARY KEY,
+                data_times TEXT,
+                address TEXT,
+                place TEXT,
+                id_user TEXT,
+                rating int,
+                review TEXT 
+            );
+        '''
+        await self.execute_query(query)
 
-    def ins(self, time, place, user, rating, review):
-        try:
-            self.cursor.execute("INSERT INTO servers (Data_times, Place, Id_user, Rating, Review) VALUES (%s, %s, %s, %s, %s);", (time, place, user, rating, review))
-            self.connection.commit()
-        except Error as e:
-            # Откат изменений в случае ошибки
-            self.connection.rollback()
-            # Выводим сообщение об ошибке и ее код
-            print(f"Transaction failed: {str(e)}")
+    async def ins(self, data_times, address,place, id_user, rating, review):
+        query = ''' 
+            INSERT INTO servers (data_times, address, place, id_user, rating, review)
+            VALUES ($1, $2, $3, $4, $5, $6);
+        '''
+        await self.execute_query(query, (data_times, address, place, id_user, rating, review))
 
-        # finally:
-        #     if self.connection:
-        #         self.cursor.close()
-        #         self.connection.close()
-        #         print('Всё окей')
+    async def ins_ins(self, data_times, place, id_user, rating, review):
+        query = ''' 
+            INSERT INTO servers (data_times, place, id_user, rating, review)
+            VALUES ($1, $2, $3, $4, $5);
+        '''
+        await self.execute_query(query, (data_times, place, id_user, rating, review))
 
-    def delete(self):
-        try:
-            self.cursor.execute("DROP TABLE servers;")
-            self.connection.commit()
+    async def delete(self):
+        query = "DROP TABLE IF EXISTS servers;"
+        await self.execute_query(query)
 
-        except Error as e:
-            # Откат изменений в случае ошибки
-            self.connection.rollback()
-            # Выводим сообщение об ошибке и ее код
-            print(f"Transaction failed: {str(e)}")
 
-        finally:
-            if self.connection:
-                self.cursor.close()
-                self.connection.close()
-                print('Всё круто')
 if __name__ == '__main__':
+    sqlbase = Sqlbase()
 
-    test_sql_class = Sqlbase()
+    async def main():
+        # Проверяем переменные окружения
+        print(f"user: {user}, password: {password}, ip: {ip}, database: {database}")
 
-    test_sql_class.spaltenausgabe()
+        # Подключаемся к базе данных
+        await sqlbase.connect()
+
+        try:
+            # Создаём таблицу
+            await sqlbase.spaltenerstellen()
+            print("Таблица успешно создана.")
+
+        finally:
+            # Закрываем соединение
+            await sqlbase.close()
+
+    asyncio.run(main())

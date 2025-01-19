@@ -11,7 +11,9 @@ dependencies:
   - pillow
   - docker
   - docker-compose
+  - apscheduler
   - pip:
+    - transliterate
     - aiogram>3.1.0
     - python-dotenv
 
