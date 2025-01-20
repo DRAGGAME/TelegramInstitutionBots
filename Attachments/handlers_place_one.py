@@ -1,13 +1,17 @@
 import base64
+import io
+import os
+import random
 
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, ReplyKeyboardMarkup
-from aiogram import Router, F, types
-from aiogram.types import Message
+from aiogram import Router, F, types, Bot
+from aiogram.types import Message, BufferedInputFile
 from aiogram.filters.command import CommandStart, Command
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.context import FSMContext
 from collections import OrderedDict
 
+from pyexpat.errors import messages
 from transliterate import translit
 
 from config import ip, PG_user, PG_password, DATABASE
@@ -15,10 +19,12 @@ from datetime import datetime
 
 from db.db_gino import Sqlbase
 
+bot = Bot(token=os.getenv('API_KEY'))
 
 router = Router()
 rating = ["1", '2', '3', '4', '5']
 sqlbase = Sqlbase()
+
 
 class Review(StatesGroup):
     user_id = State()
@@ -53,16 +59,42 @@ async def generate_deep_link(place_name):
 
 
 # Обработчик команды /start с deep_link
+from aiogram.types import ReplyKeyboardMarkup
+from uuid import uuid4
+
 @router.message(CommandStart(deep_link=True))
 async def start_with_deep_link(message: Message, state: FSMContext):
-    # Извлечение deep_link аргумента вручную из message.text
+    await sqlbase.connect()
+
+    # Извлечение и обработка deep_link аргумента
     if message.text and len(message.text.split()) > 1:
-        encoded_arg = message.text.split()[1]  # Аргумент после /start
+        encoded_arg = message.text.split()[1]
         place_name = decode_data(encoded_arg)  # Декодируем название места
+
         if place_name:
+            # Устанавливаем состояние и обновляем данные
             await state.set_state(Review.user_place)
             place_name = translit(place_name, language_code='ru', reversed=True)
             await state.update_data(user_place=place_name)
+
+            # Выполняем запрос к базе данных
+            messagen = await sqlbase.execute_query(
+                'SELECT message, photo FROM message WHERE place = $1', (place_name,)
+            )
+
+            if not messagen or not messagen[0][1]:  # Если данных нет или изображение отсутствует
+                await message.reply("Не удалось найти сообщение или изображение для указанного места.")
+                return
+
+            # Преобразуем данные изображения в BytesIO
+            try:
+                img_byte_arr = io.BytesIO(messagen[0][1])
+                if img_byte_arr.getbuffer().nbytes == 0:
+                    raise ValueError("Файл изображения пуст.")
+                img_byte_arr.seek(0)  # Возвращаем указатель в начало
+            except Exception as e:
+                await message.reply(f"Ошибка при обработке изображения: {str(e)}")
+                return
 
             # Создаем клавиатуру для оценки
             builder = ReplyKeyboardBuilder()
@@ -70,16 +102,26 @@ async def start_with_deep_link(message: Message, state: FSMContext):
                 builder.add(types.KeyboardButton(text=str(i)))
             builder.adjust(5)
 
-            # Отправляем сообщение с просьбой оценить заведение
-            await message.answer(
-                f"Оцените, пожалуйста, наше заведение: {place_name}",
-                reply_markup=builder.as_markup(resize_keyboard=True),
-            )
-            await state.set_state(Review.user_rating)
+            # Отправляем фото и сообщение пользователю
+            try:
+                chat_ids = message.from_user.id
+                file_name = f"image_{uuid4().hex}.jpg"  # Уникальное имя файла
+                input_file = BufferedInputFile(file=img_byte_arr.read(), filename=file_name)
+
+                await bot.send_photo(
+                    chat_id=chat_ids,
+                    caption=f'{messagen[0][0]}\nОцените наше заведение',
+                    photo=input_file,
+                    reply_markup=builder.as_markup(resize_keyboard=True)
+                )
+                await state.set_state(Review.user_rating)
+            except Exception as e:
+                await message.reply(f"Ошибка при отправке изображения: {str(e)}")
         else:
             await message.answer("Некорректная ссылка или место не найдено.")
     else:
         await message.answer("Не указан deep_link аргумент.")
+
 
 
 @router.message(Review.user_rating, F.text.in_(rating))

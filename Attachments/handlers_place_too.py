@@ -1,4 +1,7 @@
+import io
 import os
+import uuid
+
 from aiogram import Router, F, types, Bot
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from aiogram.filters.command import CommandStart
@@ -8,6 +11,9 @@ from collections import OrderedDict
 from aiogram.types import Message
 from db.db_gino import Sqlbase
 from datetime import datetime
+from PIL import Image
+import random
+from aiogram.types.input_file import BufferedInputFile
 
 bot = Bot(token=os.getenv('API_KEY'))
 router = Router()
@@ -86,17 +92,38 @@ async def user_place_(message: Message, state: FSMContext):
 
     # Получаем сообщение и фото из базы
     value_place = message.text
-    messagen = await sqlbase.execute_query('SELECT message, photo FROM message WHERE place = $1', (value_place,))
-    if messagen:
-        chat_ids = message.from_user.id
-        await bot.send_photo(chat_id=chat_ids, caption=messagen[0][0], photo=messagen[0][1])
+    messagen = await sqlbase.execute_query(
+        'SELECT message, photo FROM message WHERE place = $1', (value_place,)
+    )
 
-    # Создаём клавиатуру для оценки
+    # Проверка наличия данных
+    if not messagen or not messagen[0][1]:
+        await message.reply("Не удалось найти сообщение или изображение для указанного места.")
+        return
+
+    # Преобразование данных из базы в BytesIO
+    img_byte_arr = io.BytesIO(messagen[0][1])
+
+    # Проверка, что файл не пуст
+    if img_byte_arr.getbuffer().nbytes == 0:
+        await message.reply("Файл изображения пуст или поврежден.")
+        return
+
+    # Возвращаем указатель в начало
+    img_byte_arr.seek(0)
+
     builder = ReplyKeyboardBuilder()
+
     for i in range(1, 6):
         builder.add(types.KeyboardButton(text=str(i)))
     builder.adjust(5)
-    await message.answer('Выберите оценку места:', reply_markup=builder.as_markup(resize_keyboard=True))
+    # Отправляем фото пользователю
+    chat_ids = message.from_user.id
+    rd = str(uuid.uuid4().int)[:6]
+    input_file = BufferedInputFile(file=img_byte_arr.read(), filename=f"image{rd}.jpg")
+    await bot.send_photo(chat_id=chat_ids, caption=f'{messagen[0][0]}\nОцените наше заведение', photo=input_file,
+                         reply_markup=builder.as_markup(resize_keyboard=True))
+
     await state.set_state(Rev.user_rating)
 
 
