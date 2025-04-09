@@ -1,12 +1,17 @@
 FROM continuumio/miniconda3:latest
 
+LABEL main='Draggame'
+
 WORKDIR /app
 
-COPY telegrambot.yml .
+COPY . /app
 
-RUN conda env create -f telegrambot.yml
-# RUN conda activate telegramBots
+RUN conda env create -f /app/telegrambot.yml  \
+    && echo "conda activate telegramBotsClient" > ~/.bashrc  \
+    && conda clean -afy
 
-COPY . .
+ENV PATH="/opt/conda/envs/telegramBotsClient/bin:$PATH"
 
-CMD ["python", "check_sys.py"]
+EXPOSE 5432
+
+CMD ["python", "run.py"]
