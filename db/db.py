@@ -3,9 +3,9 @@ import os
 
 '''Для работы с .env'''
 
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv = load_dotenv()
+# load_dotenv = load_dotenv()
 
 database = os.getenv('DATABASE')
 

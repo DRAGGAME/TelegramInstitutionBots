@@ -15,9 +15,9 @@ from aiogram.types.input_file import BufferedInputFile
 
 '''Для работы с .env'''
 
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv = load_dotenv()
+# load_dotenv = load_dotenv()
 bot = Bot(token=os.getenv('API_KEY'))
 router = Router()
 rating = ("1", "2", "3", "4", "5", "назад", "Назад")
@@ -26,6 +26,7 @@ sqlbase = Sqlbase()
 
 # Определяем состояния для FSM
 class Rev(StatesGroup):
+    status = State()
     user_id = State()
     user_address = State()
     user_place = State()
@@ -37,16 +38,19 @@ class Rev(StatesGroup):
 @router.message(F.text.in_('Написать новый отзыв'))
 @router.message(CommandStart())
 async def starts(message: Message, state: FSMContext):
+    """
+    Начало для создания отзыва.
+    Делаем connect к БД и меняем состояние
+    """
     await sqlbase.connect()
-
-    # Загружаем адреса из базы
+    """Для выбора адреса"""
     addres = await sqlbase.execute_query('SELECT address FROM message ORDER BY id ASC')
     first = {row[0] for row in addres}
 
-    # Сохраняем адреса в состояние
+    # охраняем адреса
     await state.update_data(locales=list(first))
 
-    # Создаём клавиатуру
+    # Клавиатура с адресами
     kb = [[types.KeyboardButton(text=firs)] for firs in first]
     keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, input_field_placeholder='Введите место')
     await message.answer('Здравствуйте, выберите адрес:', reply_markup=keyboard)
@@ -55,14 +59,14 @@ async def starts(message: Message, state: FSMContext):
 
 @router.message(Rev.user_address)
 async def user_address_(message: Message, state: FSMContext):
+    """Для выбора места по адресу"""
     data = await state.get_data()
     locales = data.get("locales", [])
-
-    #Проверка на локации
+    # Проверка на локации
     if message.text not in locales:
         await message.reply('Можно ввести символы, только те, которые имеются на клавиатуре')
         return
-
+    # Сохраняем адрес
     await state.update_data(user_address=message.text)
 
     places = await sqlbase.execute_query(f'SELECT place FROM message WHERE address = $1 ORDER BY id ASC' , (message.text,))
@@ -72,7 +76,6 @@ async def user_address_(message: Message, state: FSMContext):
 
     kb = [[types.KeyboardButton(text=placen)] for placen in first_place]
     kb.append([types.KeyboardButton(text="Назад")])
-
 
     keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, input_field_placeholder='Введите место')
     await message.answer('Выберите место:', reply_markup=keyboard)
@@ -89,7 +92,6 @@ async def user_place_(message: Message, state: FSMContext):
         data = await state.get_data()
         first = data.get('locales', [])
         kb = [[types.KeyboardButton(text=firs)] for firs in first]
-        # kb.append([types.KeyboardButton(text="Назад")])
         keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, input_field_placeholder='Введите место')
         await message.answer('Здравствуйте, выберите адрес:', reply_markup=keyboard)
         return
@@ -143,13 +145,14 @@ async def user_rating_(message: Message, state: FSMContext):
         keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, input_field_placeholder='Введите оценку')
         await message.answer('Здравствуйте, выберите место:', reply_markup=keyboard)
         return
+    msg_review_or_rating = await sqlbase.execute_query('''SELECT review_or_rating_message FROM static_message''')
     await state.update_data(user_rating=message.text)
 
     keb = [[types.KeyboardButton(text='Да'), types.KeyboardButton(text='Нет')],
            [types.KeyboardButton(text='Назад')]]
     keyboard = types.ReplyKeyboardMarkup(keyboard=keb, resize_keyboard=True, input_field_placeholder='Хотите написать ли вы отзыв')
     await message.answer(
-        'Оценка принята. Если вы желаете написать отзыв, то напишите "Да", если нет, то "Нет".',
+        f'{msg_review_or_rating[0][0]}',
         reply_markup=keyboard
     )
     await state.set_state(Rev.user_reply)
@@ -170,7 +173,8 @@ async def rat(message: Message, state: FSMContext):
                                                                                               'Введите оценку'))
 
     if user_input in ['Да', 'да']:
-        await message.answer('Напишите, пожалуйста, отзыв', input_field_placeholder='Напишите отзыв', reply_markup=types.ReplyKeyboardRemove())
+        msg_review = await sqlbase.execute_query('''SELECT review_message FROM static_message''')
+        await message.answer(f'{msg_review[0][0]}', input_field_placeholder='Отзыв', reply_markup=types.ReplyKeyboardRemove())
         await state.set_state(Rev.user_review)
 
     elif user_input in ['Нет', 'нет']:
@@ -197,7 +201,7 @@ async def save_reviewer(message: Message, state: FSMContext):
     moscow_tz = timezone("Europe/Moscow")
     current_datetime = datetime.now(moscow_tz).strftime('%Y-%m-%d %H:%M:%S')
     if message.sticker:
-        await message.answer('Не отправляйте стикером, бот его не обработает')
+        await message.answer('Отзыв не может быть стикером')
         return
     await state.update_data(user_review=message.text)
     builder.add(types.KeyboardButton(text='Написать новый отзыв'))

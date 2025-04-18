@@ -6,10 +6,12 @@ from Attachments import handlers_place_one, handlers_place_too
 
 '''Для работы с .env'''
 
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv = load_dotenv()
-logging.basicConfig(level=logging.DEBUG)
+# load_dotenv = load_dotenv()
+logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.WARN)
+logging.basicConfig(level=logging.ERROR)
 BOT = Bot(token=os.getenv('API_KEY'))
 dp = Dispatcher()
 
@@ -24,5 +26,3 @@ if __name__ == '__main__':
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
-    finally:
-        BOT.session.close()

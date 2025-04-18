@@ -15,9 +15,9 @@ from db.db import Sqlbase
 
 '''Для работы с .env'''
 
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv = load_dotenv()
+# load_dotenv = load_dotenv()
 bot = Bot(token=os.getenv('API_KEY'))
 
 router = Router()
@@ -30,8 +30,9 @@ class Review(StatesGroup):
     user_place = State()
     user_rating = State()
     user_review = State()
+    user_kvm = State()
 
-def decode_data(encoded_text):
+def decode_data(encoded_text: str):
     try:
         return base64.urlsafe_b64decode(encoded_text.encode('utf-8')).decode('utf-8')
     except Exception:
@@ -93,25 +94,76 @@ async def start_with_deep_link(message: Message, state: FSMContext):
     else:
         await message.answer("Не указан deep_link аргумент.")
 
-
-
 @router.message(Review.user_rating, F.text.in_(rating))
-async def too(message: Message, state: FSMContext):
+async def user_rating_(message: Message, state: FSMContext):
+    msg_review_or_rating = await sqlbase.execute_query('''SELECT review_or_rating_message FROM static_message''')
     await state.update_data(user_rating=message.text)
-    kb = [
-        [types.KeyboardButton(text='Да'), types.KeyboardButton(text='Нет')],
 
-    ]
-    keyboard = types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, input_field_placeholder='Введите да или нет')
-    await message.answer('Оценка принята\nЕсли вы желаете написать отзыв, то напишите "Да", если нет, то соответственно', reply_markup=keyboard)
+    keb = [[types.KeyboardButton(text='Да'), types.KeyboardButton(text='Нет')],
+           [types.KeyboardButton(text='Назад')]]
+    keyboard = types.ReplyKeyboardMarkup(keyboard=keb, resize_keyboard=True, input_field_placeholder='Хотите написать ли вы отзыв')
+    await message.answer(
+        f'{msg_review_or_rating[0][0]}',
+        reply_markup=keyboard
+    )
+    await state.set_state(Review.user_rating)
 
 
-@router.message(F.text.in_(['Да','да','Нет','нет']), Review.user_rating)
+
+@router.message(F.text.in_(['Да', 'да', 'Нет', 'нет', 'назад', 'Назад']), Review.user_rating)
 async def rat(message: Message, state: FSMContext):
+    if message.text.lower() in 'назад':
+        data = await state.get_data()
+
+        # Выполняем запрос к базе данных
+        messagen = await sqlbase.execute_query(
+            'SELECT message, photo FROM message WHERE place = $1', (data['user_place'],)
+        )
+
+        if not messagen or not messagen[0][1]:  # Если данных нет или изображение отсутствует
+            await message.reply("Не удалось найти сообщение или изображение для указанного места.")
+            return
+
+        # Преобразуем данные изображения в BytesIO
+        try:
+            img_byte_arr = io.BytesIO(messagen[0][1])
+            if img_byte_arr.getbuffer().nbytes == 0:
+                raise ValueError("Файл изображения пуст.")
+            img_byte_arr.seek(0)
+        except Exception as e:
+            await message.reply(f"Ошибка при обработке изображения: {str(e)}")
+            return
+
+        # Создаем клавиатуру для оценки
+        builder = ReplyKeyboardBuilder()
+        for i in range(1, 6):  # Оценки от 1 до 5
+            builder.add(types.KeyboardButton(text=str(i)))
+        builder.adjust(5)
+
+        # Отправляем фото и сообщение пользователю
+        try:
+            chat_ids = message.from_user.id
+            file_name = f"image_{uuid4().hex}.jpg"  # Уникальное имя файла
+            input_file = BufferedInputFile(file=img_byte_arr.read(), filename=file_name)
+
+            await bot.send_photo(
+                chat_id=chat_ids,
+                caption=f'{messagen[0][0]}\nОцените наше заведение',
+                photo=input_file,
+                reply_markup=builder.as_markup(resize_keyboard=True)
+            )
+            await state.set_state(Review.user_rating)
+        except Exception as e:
+            await message.reply(f"Ошибка при отправке изображения: {str(e)}")
+
     user_input = message.text
 
     if user_input in ['Да', 'да']:
-        await message.answer('Напишите пожалуйста отзыв', input_field_placeholder='Напишите отзыв',reply_markup=types.ReplyKeyboardRemove())
+        msg_review = await sqlbase.execute_query('''SELECT review_message FROM static_message''')
+
+        await message.answer(f'{msg_review[0][0]}', input_field_placeholder='Отзыв',
+                             reply_markup=types.ReplyKeyboardRemove())
+
         await state.set_state(Review.user_review)
 
     elif user_input in ['Нет', 'нет']:
