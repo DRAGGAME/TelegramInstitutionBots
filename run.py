@@ -1,28 +1,31 @@
-import logging
 import asyncio
-import os
-from aiogram import Bot, Dispatcher
-from Attachments import handlers_place_one, handlers_place_too
+import logging
+
+from aiogram import Dispatcher
+from config import bot
+from handlers import handlers_for_review
 
 '''Для работы с .env'''
+logging.basicConfig(level=logging.DEBUG,
+                    format='[%(asctime)s] #%(levelname)-4s %(filename)s:'
+                    '%(lineno)d - %(name)s - %(message)s'
+                    )
 
-# from dotenv import load_dotenv
 
-# load_dotenv = load_dotenv()
-logging.basicConfig(level=logging.WARNING)
-logging.basicConfig(level=logging.WARN)
-logging.basicConfig(level=logging.ERROR)
-BOT = Bot(token=os.getenv('API_KEY'))
 dp = Dispatcher()
 
-dp.include_router(handlers_place_one.router)
-dp.include_router(handlers_place_too.router)
+dp.include_router(handlers_for_review.router)
 
 async def main():
-    await dp.start_polling(BOT)
 
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
 if __name__ == '__main__':
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+
+

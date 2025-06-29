@@ -3,15 +3,12 @@ import os
 
 '''Для работы с .env'''
 
-# from dotenv import load_dotenv
+from config import HOST, PASSWORD, DATABASE, USER
 
-# load_dotenv = load_dotenv()
-
-database = os.getenv('DATABASE')
-
-user = os.getenv('PG_user')
-password = os.getenv('PG_password')
-ip = os.getenv('ip')
+pg_host = HOST
+pg_user = USER
+pg_password = PASSWORD
+pg_database = DATABASE
 
 
 class Sqlbase:
@@ -21,10 +18,10 @@ class Sqlbase:
     async def connect(self):
         try:
             self.pool = await asyncpg.create_pool(
-                host=ip,
-                user=user,
-                password=password,
-                database=database,
+                host=pg_host,
+                user=pg_user,
+                password=pg_password,
+                database=pg_database,
                 min_size=1,
                 max_size=10000
             )
@@ -50,33 +47,20 @@ class Sqlbase:
             print(f"Ошибка выполнения запроса: {e}")
             raise
 
-    async def spaltenerstellen(self):
-        query = '''
-            CREATE TABLE IF NOT EXISTS servers (
-                Id SERIAL PRIMARY KEY,
-                data_times TIMESTAMP,
-                address TEXT,
-                place TEXT,
-                id_user TEXT,
-                rating INT,
-                review TEXT
-            );
-        '''
-        await self.execute_query(query)
+    async def insert_in_reviews(self, data_times: str, address: str, place: str, id_user: str, rating: int, review=None):
+        if review:
+            query = '''
+                INSERT INTO reviews (data_times, address, place, id_user, rating, review)
+                VALUES ($1, $2, $3, $4, $5, $6);
+            '''
+            await self.execute_query(query, (data_times, address, place, id_user, rating, review))
+        else:
+            query = '''
+                INSERT INTO reviews (data_times, address, place, id_user, rating)
+                VALUES ($1, $2, $3, $4, $5);
+            '''
+            await self.execute_query(query, (data_times, address, place, id_user, rating))
 
-    async def ins(self, data_times, address, place, id_user, rating, review):
-        query = '''
-            INSERT INTO servers (data_times, address, place, id_user, rating, review)
-            VALUES ($1, $2, $3, $4, $5, $6);
-        '''
-        await self.execute_query(query, (data_times, address, place, id_user, rating, review))
-
-    async def ins_ins(self, data_times,  place, id_user, rating, review):
-        query = '''
-            INSERT INTO servers (data_times, place, id_user, rating, review)
-            VALUES ($1, $2, $3, $4, $5);
-        '''
-        await self.execute_query(query, (data_times, place, id_user, rating, review))
     async def delete(self):
         query = "DROP TABLE IF EXISTS servers;"
         await self.execute_query(query)
