@@ -1,4 +1,3 @@
-from sys import prefix
 from typing import Union
 
 from aiogram.filters.callback_data import CallbackData
@@ -66,9 +65,10 @@ class KeyboardFactory:
         return first_keyboard
 
     async def builder_reply_new_review(self):
+        await self.create_builder_reply()
         self.builder_reply.add(KeyboardButton(text="Отправить новый отзыв"))
         first_keyboard = self.builder_reply.as_markup(resize_keyboard=True,
-                                                      input_field_placeholder="Какую вы поставите оценку заведению?"
+                                                      input_field_placeholder="Хотите написать новый отзыв?"
                                                       , is_persistent=True)
         return first_keyboard
 

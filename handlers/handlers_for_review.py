@@ -28,7 +28,7 @@ class Rev(StatesGroup):
     user_review = State()
 
 
-@router.message(F.text.in_('Написать новый отзыв'))
+@router.message(F.text.in_('Отправить новый отзыв'))
 @router.message(CommandStart())
 async def starts(message: Message, state: FSMContext):
     """
@@ -53,7 +53,8 @@ async def user_address_(message: Message, state: FSMContext):
     addresses = await state.get_value("addresses")
 
     if message.text not in addresses:
-        await message.reply('Можно ввести символы, только те, которые имеются на клавиатуре')
+        kb = await state.get_value("addresses_kb")
+        await message.reply('Можно ввести символы, только те, которые имеются в кнопках\nВыберите адрес', reply_markup=kb)
         return
 
     user_address = message.text
@@ -87,7 +88,8 @@ async def user_place_(message: Message, state: FSMContext):
     all_places = await state.get_value("all_places")
 
     if message.text not in all_places :
-        await message.reply('Можно ввести символы, только те, которые имеются на клавиатуре')
+        kb = await state.get_value("places_kb")
+        await message.reply('Можно ввести символы, только те, которые имеются в кнопках\nВыберите место', reply_markup=kb)
         return
 
     user_place = message.text
@@ -121,8 +123,14 @@ async def user_place_(message: Message, state: FSMContext):
     await state.set_state(Rev.user_rating)
 
 
-@router.message(Rev.user_rating, F.text.lower().in_(rating))
+@router.message(Rev.user_rating, F.text.lower() )
 async def user_rating_(message: Message, state: FSMContext):
+
+    if message.text.lower() not in rating:
+        kb = await state.get_value("rating_kb")
+
+        await message.answer('Можно ввести слова, только те, которые имеются в кнопках', reply_markup=kb)
+        return
 
     if 'назад' in message.text.lower():
         kb = await state.get_value("places_kb")
@@ -131,7 +139,8 @@ async def user_rating_(message: Message, state: FSMContext):
         await message.answer('Здравствуйте, выберите место:', reply_markup=kb)
         return
 
-    msg_review_or_rating = await sqlbase.execute_query('''SELECT settings_for_review_bot FROM static_message''')
+
+    msg_review_or_rating = await sqlbase.execute_query('''SELECT review_or_rating_message FROM settings_for_review_bot''')
 
     kb = await keyboard_factory.builder_reply_choice("Хотите ли вы написать отзыв?")
 
@@ -143,21 +152,21 @@ async def user_rating_(message: Message, state: FSMContext):
     await state.set_state(Rev.user_reply)
 
 
-@router.message(F.text.lower().in_(['да', 'нет', 'назад']), Rev.user_reply)
+@router.message(F.text.lower(), Rev.user_reply)
 async def finally_rating(message: Message, state: FSMContext):
-    user_input = message.text
+    user_input = message.text.lower()
     if 'назад' in message.text.lower():
         kb = await state.get_value("rating_kb")
         await state.set_state(Rev.user_rating)
         await message.answer('Здравствуйте, выберите оценку:', reply_markup=kb)
         return
 
-    if user_input in ['Да', 'да']:
+    if 'да' in user_input:
         msg_review = await sqlbase.execute_query('''SELECT review_message FROM settings_for_review_bot''')
         await message.answer(f'{msg_review[0][0]}', input_field_placeholder='Отзыв', reply_markup=types.ReplyKeyboardRemove())
         await state.set_state(Rev.user_review)
 
-    elif user_input in ['Нет', 'нет']:
+    elif 'нет' in user_input:
         kb = await keyboard_factory.builder_reply_new_review()
 
         moscow_tz = timezone("Europe/Moscow")
@@ -168,14 +177,17 @@ async def finally_rating(message: Message, state: FSMContext):
         place = await state.get_value("user_place")
         rating = await state.get_value("user_rating")
 
-        await sqlbase.insert_in_reviews(current_datetime, address, place, str(chat_id), rating, )
+        await sqlbase.insert_in_reviews(current_datetime, address, place, str(chat_id), int(rating), )
 
         await message.answer('Спасибо за оценку нашего заведения!', reply_markup=kb)
         await sqlbase.close()
-        await bot.session.close()  # Закрытие сессии бота
 
         await state.clear()
 
+    else:
+        kb = await state.get_value("choice_kb")
+
+        await message.answer("Можно ввести цифры или слова, которые есть в кнопках\nВведите, хотите ли вы написать отзыв", reply_markup=kb)
 
 @router.message(Rev.user_review)
 async def save_reviewer(message: Message, state: FSMContext):
@@ -192,7 +204,7 @@ async def save_reviewer(message: Message, state: FSMContext):
         rating = await state.get_value("user_rating")
         review = message.text
 
-        await sqlbase.insert_in_reviews(current_datetime, address, place, str(chat_id), rating, review=review)
+        await sqlbase.insert_in_reviews(current_datetime, address, place, str(chat_id), int(rating), review=review)
 
         await message.answer('Спасибо за оценку нашего заведения!', reply_markup=kb)
         await sqlbase.close()
@@ -205,6 +217,3 @@ async def save_reviewer(message: Message, state: FSMContext):
     await sqlbase.close()
     await state.clear()
 
-@router.message(Rev.user_rating, ~F.text.in_(rating))
-async def not_text(message: Message):
-    await message.answer('Можно ввести символы, только те, какие есть в кнопках')
