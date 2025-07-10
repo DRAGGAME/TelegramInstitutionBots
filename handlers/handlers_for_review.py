@@ -100,10 +100,9 @@ async def user_place_(message: Message, state: FSMContext):
                             reply_markup=kb)
         return
 
-    else:
-        print("No argument\n")
-        user_place = message.text
     try:
+        user_place = message.text
+
         send_message = await sqlbase.execute_query(
             'SELECT message, photo FROM message WHERE place = $1', (user_place,)
         )
