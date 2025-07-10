@@ -44,7 +44,6 @@ async def user_place_(message: Message, state: FSMContext):
     all_places = await state.get_value("all_places")
 
     if message.text and len(message.text.split()) > 1:
-        logging.info("Да")
         encoded_arg = message.text.split()[1]
         place_name = decode_text(encoded_arg)
         logging.info(place_name)
@@ -58,13 +57,18 @@ async def user_place_(message: Message, state: FSMContext):
 
     try:
         logging.info("Try")
-        user_place = message.text
+        if user_place in " " or user_place in "" or user_place is None:
+            user_place = message.text
+
+        logging.info(user_place)
 
         send_message = await sqlbase.execute_query(
             'SELECT message, photo FROM message WHERE place = $1', (user_place,)
         )
     except exceptions.InterfaceError:
         await sqlbase.connect()
+        if user_place in " " or user_place in "" or user_place is None:
+            user_place = message.text
         send_message = await sqlbase.execute_query(
             'SELECT message, photo FROM message WHERE place = $1', (user_place,)
         )
