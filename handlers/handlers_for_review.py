@@ -92,6 +92,7 @@ async def user_place_(message: Message, state: FSMContext):
     if message.text and len(message.text.split()) > 1:
         encoded_arg = message.text.split()[1]
         place_name = decode_text(encoded_arg)
+        user_place = place_name
 
     elif message.text not in all_places:
         kb = await state.get_value("places_kb")
@@ -99,7 +100,8 @@ async def user_place_(message: Message, state: FSMContext):
                             reply_markup=kb)
         return
 
-    user_place = place_name
+    else:
+        user_place = message.text
     try:
         send_message = await sqlbase.execute_query(
             'SELECT message, photo FROM message WHERE place = $1', (user_place,)
