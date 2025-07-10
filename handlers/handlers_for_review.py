@@ -9,7 +9,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message
 from aiogram.types.input_file import BufferedInputFile
-from asyncpg import exceptions
 from pytz import timezone
 
 from config import bot
@@ -31,6 +30,7 @@ class Rev(StatesGroup):
     user_rating = State()
     user_reply = State()
     user_review = State()
+
 
 @router.message(CommandStart(deep_link=True))
 @router.message(Rev.user_place)
@@ -91,6 +91,7 @@ async def user_place_(message: Message, state: FSMContext):
                          reply_markup=kb)
 
     await state.set_state(Rev.user_rating)
+
 
 @router.message(F.text.in_('Отправить новый отзыв'))
 @router.message(CommandStart(deep_link=False))
@@ -191,7 +192,8 @@ async def finally_rating(message: Message, state: FSMContext):
         address = await state.get_value("user_address")
         place = await state.get_value("user_place")
         rating = await state.get_value("user_rating")
-
+        if address is None:
+            address = "Нет"
         await sqlbase.insert_in_reviews(current_datetime, address, place, str(chat_id), int(rating), )
 
         await message.answer('Спасибо за оценку нашего заведения!', reply_markup=kb)
@@ -221,7 +223,8 @@ async def save_reviewer(message: Message, state: FSMContext):
         place = await state.get_value("user_place")
         rating = await state.get_value("user_rating")
         review = message.text
-
+        if address is None:
+            address = "Нет"
         await sqlbase.insert_in_reviews(current_datetime, address, place, str(chat_id), int(rating), review=review)
 
         await message.answer('Спасибо за оценку нашего заведения!', reply_markup=kb)
