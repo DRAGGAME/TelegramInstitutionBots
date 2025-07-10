@@ -101,7 +101,7 @@ async def user_place_(message: Message, state: FSMContext):
         return
 
     else:
-        print("No argument")
+        print("No argument\n")
         user_place = message.text
     try:
         send_message = await sqlbase.execute_query(
