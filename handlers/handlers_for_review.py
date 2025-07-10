@@ -36,6 +36,11 @@ class Rev(StatesGroup):
 @router.message(Rev.user_place)
 async def user_place_(message: Message, state: FSMContext):
     if 'назад' in message.text.lower():
+        try:
+            await sqlbase.close()
+            await sqlbase.connect()
+        except Exception:
+            await sqlbase.connect()
         await state.set_state(Rev.user_address)
         kb = await state.get_value("addresses_kb")
         await message.answer('Здравствуйте, выберите адрес:', reply_markup=kb)
@@ -55,23 +60,14 @@ async def user_place_(message: Message, state: FSMContext):
                             reply_markup=kb)
         return
 
-    try:
-        logging.info("Try")
-        if user_place in " " or user_place in "" or user_place is None:
-            user_place = message.text
+    logging.info("Try")
+    if user_place in " " or user_place in "" or user_place is None:
+        user_place = message.text
 
-        logging.info(user_place)
+    logging.info(user_place)
 
-        send_message = await sqlbase.execute_query(
-            'SELECT message, photo FROM message WHERE place = $1', (user_place,)
-        )
-    except exceptions.InterfaceError:
-        await sqlbase.connect()
-        if user_place in " " or user_place in "" or user_place is None:
-            user_place = message.text
-        send_message = await sqlbase.execute_query(
-            'SELECT message, photo FROM message WHERE place = $1', (user_place,)
-        )
+    send_message = await sqlbase.execute_query(
+        'SELECT message, photo FROM message WHERE place = $1', (user_place,))
 
     img_byte_arr = io.BytesIO(send_message[0][1])
 
