@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import Message
 from aiogram.types.input_file import BufferedInputFile
+from asyncpg import exceptions
 from pytz import timezone
 
 from config import bot
@@ -29,56 +30,6 @@ class Rev(StatesGroup):
     user_rating = State()
     user_reply = State()
     user_review = State()
-
-
-@router.message(CommandStart(deep_link=True))
-@router.message(Rev.user_place)
-async def user_place_(message: Message, state: FSMContext):
-    if 'назад' in message.text.lower():
-        await state.set_state(Rev.user_address)
-        kb = await state.get_value("addresses_kb")
-        await message.answer('Здравствуйте, выберите адрес:', reply_markup=kb)
-        return
-
-    all_places = await state.get_value("all_places")
-    if message.text and len(message.text.split()) > 1:
-        encoded_arg = message.text.split()[1]
-        place_name = decode_text(encoded_arg)
-
-    elif message.text not in all_places:
-        kb = await state.get_value("places_kb")
-        await message.reply('Можно ввести символы, только те, которые имеются в кнопках\nВыберите место',
-                            reply_markup=kb)
-        return
-
-    place_name = message.text
-
-    send_message = await sqlbase.execute_query(
-        'SELECT message, photo FROM message WHERE place = $1', (place_name,)
-    )
-
-    img_byte_arr = io.BytesIO(send_message[0][1])
-
-    if img_byte_arr.getbuffer().nbytes == 0:
-        await message.reply("Файл изображения пуст или поврежден.")
-        return
-
-    img_byte_arr.seek(0)
-
-    kb = await keyboard_factory.builder_reply_rating()
-
-    chat_id = message.from_user.id
-
-    rd = str(uuid.uuid4().int)[:6]
-    place_name = message.text
-    await state.update_data(rating_kb=kb, user_place=place_name)
-
-    input_file = BufferedInputFile(file=img_byte_arr.read(), filename=f"image{rd}.jpg")
-
-    await bot.send_photo(chat_id=chat_id, caption=f'{send_message[0][0]}', photo=input_file,
-                         reply_markup=kb)
-
-    await state.set_state(Rev.user_rating)
 
 
 @router.message(F.text.in_('Отправить новый отзыв'))
@@ -125,6 +76,62 @@ async def user_address_(message: Message, state: FSMContext):
     await message.answer('Выберите место:', reply_markup=kb)
 
     await state.set_state(Rev.user_place)
+
+
+@router.message(CommandStart(deep_link=True))
+@router.message(Rev.user_place)
+async def user_place_(message: Message, state: FSMContext):
+    if 'назад' in message.text.lower():
+        await state.set_state(Rev.user_address)
+        kb = await state.get_value("addresses_kb")
+        await message.answer('Здравствуйте, выберите адрес:', reply_markup=kb)
+        return
+
+    all_places = await state.get_value("all_places")
+
+    if message.text and len(message.text.split()) > 1:
+        encoded_arg = message.text.split()[1]
+        place_name = decode_text(encoded_arg)
+
+    elif message.text not in all_places:
+        kb = await state.get_value("places_kb")
+        await message.reply('Можно ввести символы, только те, которые имеются в кнопках\nВыберите место',
+                            reply_markup=kb)
+        return
+
+    user_place = place_name
+    try:
+        send_message = await sqlbase.execute_query(
+            'SELECT message, photo FROM message WHERE place = $1', (user_place,)
+        )
+    except exceptions.InterfaceError:
+        await sqlbase.connect()
+        send_message = await sqlbase.execute_query(
+            'SELECT message, photo FROM message WHERE place = $1', (user_place,)
+        )
+
+    img_byte_arr = io.BytesIO(send_message[0][1])
+
+    if img_byte_arr.getbuffer().nbytes == 0:
+        await message.reply("Файл изображения пуст или поврежден.")
+        return
+
+    img_byte_arr.seek(0)
+
+    kb = await keyboard_factory.builder_reply_rating()
+
+    chat_id = message.from_user.id
+
+    rd = str(uuid.uuid4().int)[:6]
+
+    await state.update_data(rating_kb=kb, user_place=user_place)
+
+    input_file = BufferedInputFile(file=img_byte_arr.read(), filename=f"image{rd}.jpg")
+
+    await bot.send_photo(chat_id=chat_id, caption=f'{send_message[0][0]}', photo=input_file,
+                         reply_markup=kb)
+
+    await state.set_state(Rev.user_rating)
 
 
 @router.message(Rev.user_rating, F.text.lower())
