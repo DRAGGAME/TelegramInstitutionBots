@@ -35,12 +35,12 @@ class Rev(StatesGroup):
 @router.message(CommandStart(deep_link=True))
 @router.message(Rev.user_place)
 async def user_place_(message: Message, state: FSMContext):
+    try:
+        await sqlbase.close()
+        await sqlbase.connect()
+    except Exception:
+        await sqlbase.connect()
     if 'назад' in message.text.lower():
-        try:
-            await sqlbase.close()
-            await sqlbase.connect()
-        except Exception:
-            await sqlbase.connect()
         await state.set_state(Rev.user_address)
         kb = await state.get_value("addresses_kb")
         await message.answer('Здравствуйте, выберите адрес:', reply_markup=kb)
