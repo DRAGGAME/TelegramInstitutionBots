@@ -29,7 +29,7 @@ class Rev(StatesGroup):
 
 
 @router.message(F.text.in_('Отправить новый отзыв'))
-@router.message(CommandStart())
+@router.message(CommandStart(deep_link=False))
 async def starts(message: Message, state: FSMContext):
     """
     Начало для создания отзыва.
@@ -117,7 +117,7 @@ async def user_place_(message: Message, state: FSMContext):
 
     input_file = BufferedInputFile(file=img_byte_arr.read(), filename=f"image{rd}.jpg")
 
-    await bot.send_photo(chat_id=chat_id, caption=f'{send_message[0][0]}\nОцените наше заведение', photo=input_file,
+    await bot.send_photo(chat_id=chat_id, caption=f'{send_message[0][0]}', photo=input_file,
                          reply_markup=kb)
 
     await state.set_state(Rev.user_rating)
