@@ -1,4 +1,5 @@
 import io
+import logging
 import uuid
 from datetime import datetime
 
@@ -43,6 +44,7 @@ async def user_place_(message: Message, state: FSMContext):
     all_places = await state.get_value("all_places")
 
     if message.text and len(message.text.split()) > 1:
+        logging.info("Да")
         encoded_arg = message.text.split()[1]
         place_name = decode_text(encoded_arg)
         user_place = place_name
