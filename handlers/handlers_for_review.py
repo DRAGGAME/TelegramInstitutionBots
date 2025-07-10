@@ -47,6 +47,7 @@ async def user_place_(message: Message, state: FSMContext):
         logging.info("Да")
         encoded_arg = message.text.split()[1]
         place_name = decode_text(encoded_arg)
+        logging.info(place_name)
         user_place = place_name
 
     elif message.text not in all_places:
@@ -56,6 +57,7 @@ async def user_place_(message: Message, state: FSMContext):
         return
 
     try:
+        logging.info("Try")
         user_place = message.text
 
         send_message = await sqlbase.execute_query(
