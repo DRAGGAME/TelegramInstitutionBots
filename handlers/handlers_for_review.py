@@ -31,53 +31,6 @@ class Rev(StatesGroup):
     user_reply = State()
     user_review = State()
 
-
-@router.message(F.text.in_('Отправить новый отзыв'))
-@router.message(CommandStart(deep_link=False))
-async def starts(message: Message, state: FSMContext):
-    """
-    Начало для создания отзыва.
-    Делаем connect к БД и меняем состояние
-    """
-    await state.clear()
-    await sqlbase.connect()
-    """Для выбора адреса"""
-    addresses = await sqlbase.execute_query('SELECT address FROM message ORDER BY id ASC')
-    addresses = {row[0] for row in addresses}
-
-    kb = await keyboard_factory.builder_reply_text(addresses, "Выберите адрес", False)
-    await state.update_data(addresses=addresses, addresses_kb=kb)
-    await message.answer('Здравствуйте, выберите адрес:', reply_markup=kb)
-    await state.set_state(Rev.user_address)
-
-
-@router.message(Rev.user_address)
-async def user_address_(message: Message, state: FSMContext):
-    """Для выбора места по адресу"""
-
-    addresses = await state.get_value("addresses")
-
-    if message.text not in addresses:
-        kb = await state.get_value("addresses_kb")
-        await message.reply('Можно ввести символы, только те, которые имеются в кнопках\nВыберите адрес',
-                            reply_markup=kb)
-        return
-
-    user_address = message.text
-
-    places = await sqlbase.execute_query(f'SELECT place FROM message WHERE address = $1 ORDER BY id ASC',
-                                         (user_address,))
-
-    all_places = {row[0] for row in places}
-
-    kb = await keyboard_factory.builder_reply_text(all_places, "Выберите место", True)
-    await state.update_data(all_places=all_places, user_address=user_address, places_kb=kb)
-
-    await message.answer('Выберите место:', reply_markup=kb)
-
-    await state.set_state(Rev.user_place)
-
-
 @router.message(CommandStart(deep_link=True))
 @router.message(Rev.user_place)
 async def user_place_(message: Message, state: FSMContext):
@@ -134,6 +87,51 @@ async def user_place_(message: Message, state: FSMContext):
                          reply_markup=kb)
 
     await state.set_state(Rev.user_rating)
+
+@router.message(F.text.in_('Отправить новый отзыв'))
+@router.message(CommandStart(deep_link=False))
+async def starts(message: Message, state: FSMContext):
+    """
+    Начало для создания отзыва.
+    Делаем connect к БД и меняем состояние
+    """
+    await state.clear()
+    await sqlbase.connect()
+    """Для выбора адреса"""
+    addresses = await sqlbase.execute_query('SELECT address FROM message ORDER BY id ASC')
+    addresses = {row[0] for row in addresses}
+
+    kb = await keyboard_factory.builder_reply_text(addresses, "Выберите адрес", False)
+    await state.update_data(addresses=addresses, addresses_kb=kb)
+    await message.answer('Здравствуйте, выберите адрес:', reply_markup=kb)
+    await state.set_state(Rev.user_address)
+
+
+@router.message(Rev.user_address)
+async def user_address_(message: Message, state: FSMContext):
+    """Для выбора места по адресу"""
+
+    addresses = await state.get_value("addresses")
+
+    if message.text not in addresses:
+        kb = await state.get_value("addresses_kb")
+        await message.reply('Можно ввести символы, только те, которые имеются в кнопках\nВыберите адрес',
+                            reply_markup=kb)
+        return
+
+    user_address = message.text
+
+    places = await sqlbase.execute_query(f'SELECT place FROM message WHERE address = $1 ORDER BY id ASC',
+                                         (user_address,))
+
+    all_places = {row[0] for row in places}
+
+    kb = await keyboard_factory.builder_reply_text(all_places, "Выберите место", True)
+    await state.update_data(all_places=all_places, user_address=user_address, places_kb=kb)
+
+    await message.answer('Выберите место:', reply_markup=kb)
+
+    await state.set_state(Rev.user_place)
 
 
 @router.message(Rev.user_rating, F.text.lower())
