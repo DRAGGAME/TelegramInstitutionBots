@@ -6,7 +6,8 @@ WORKDIR /app
 
 COPY . /app
 
-RUN conda env create -f /app/telegrambot.yml  \
+RUN conda update -n base -c defaults conda \
+    && conda env create -f /app/telegrambot.yml  \
     && echo "conda activate telegramBotsClient" > ~/.bashrc  \
     && conda clean -afy
 
